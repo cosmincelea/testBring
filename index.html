@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bring Address API Tester</title>
+    <style>
+        /* Your existing CSS styles remain here */
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+        }
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px; /* Reduced margin */
+        }
+        .config-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        input, button {
+            padding: 12px 16px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+        }
+        input:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+        #countryCode {
+            width: 80px;
+            text-transform: uppercase;
+        }
+        #apiKey {
+            flex: 1;
+        }
+        #searchQuery {
+            flex: 1;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            white-space: nowrap; /* Prevent button text wrapping */
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .stats {
+            background: #e8f4e8;
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .stats.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .stats.visible {
+            display: block;
+        }
+        .results {
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .result-item {
+            padding: 12px 16px;
+            border-bottom: 1px solid #eee;
+        }
+        .result-item:last-child {
+            border-bottom: none;
+        }
+        .result-item:hover {
+            background: #f9f9f9;
+        }
+        .no-results {
+            padding: 20px;
+            text-align: center;
+            color: #666;
+        }
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 16px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 13px;
+            margin-top: 20px;
+        }
+        .toggle-raw {
+            background: #6c757d;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Bring Address API Tester 📦</h1>
+    
+    <div class="config-group">
+        <input type="text" id="apiKey" placeholder="Your Bring API Key" value="08efdeb8-49e5-4b4d-a1d5-96adb0ac8e73">
+        <input type="text" id="countryCode" placeholder="NO" value="NO" maxlength="2">
+    </div>
+    
+    <div class="input-group">
+        <input type="text" id="searchQuery" placeholder="Enter address to search...">
+        <button onclick="search()">Search</button>
+        <button class="toggle-raw" onclick="toggleRaw()">Toggle Raw</button>
+    </div>
+    
+    <div id="stats" class="stats"></div>
+    
+    <div id="results" class="results"></div>
+    
+    <pre id="rawJson" style="display: none;"></pre>
+
+    <script>
+        const apiKeyInput = document.getElementById('apiKey');
+        const searchInput = document.getElementById('searchQuery');
+        const countryInput = document.getElementById('countryCode');
+        const statsDiv = document.getElementById('stats');
+        const resultsDiv = document.getElementById('results');
+        const rawJsonPre = document.getElementById('rawJson');
+        
+        let lastResponse = null;
+
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') search();
+        });
+
+        async function search() {
+            const country = countryInput.value.trim().toUpperCase() || 'NO';
+            const query = searchInput.value.trim();
+            const apiKey = apiKeyInput.value.trim(); // Get the API Key
+            
+            if (!query) {
+                showStats('Please enter a search query', true);
+                return;
+            }
+
+            if (!apiKey || apiKey === 'YOUR_API_KEY_HERE') {
+                showStats('Please enter a valid API Key', true);
+                return;
+            }
+
+            const url = `https://api.bring.com/address/api/${country}/addresses/suggestions?q=${encodeURIComponent(query)}`;
+            
+            resultsDiv.innerHTML = '<div class="no-results">Loading...</div>';
+            statsDiv.className = 'stats';
+            
+            const startTime = performance.now();
+            
+            try {
+                // ADDING AUTHENTICATION
+                const response = await fetch(url, {
+                    headers: {
+                        // The Bring Address API documentation specifies using X-MyBring-API-Key
+                        'X-MyBring-API-Key': apiKey, 
+                        'Accept': 'application/json' // Good practice
+                    }
+                });
+                // END AUTHENTICATION
+                
+                const endTime = performance.now();
+                const duration = (endTime - startTime).toFixed(0);
+                
+                // If the key is invalid or missing, the status is often 403 or 401
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status} (${response.statusText}). Check your API Key and query parameters.`);
+                }
+                
+                const data = await response.json();
+                lastResponse = data;
+                
+                // Bring's response structure might put suggestions directly or under 'suggestions'
+                const suggestions = data.suggestions || data || [];
+                const count = Array.isArray(suggestions) ? suggestions.length : 0;
+                
+                showStats(`Found ${count} results in ${duration}ms`, false);
+                displayResults(suggestions);
+                rawJsonPre.textContent = JSON.stringify(data, null, 2);
+                
+            } catch (error) {
+                const endTime = performance.now();
+                const duration = (endTime - startTime).toFixed(0);
+                showStats(`Error after ${duration}ms: ${error.message}`, true);
+                resultsDiv.innerHTML = '';
+                rawJsonPre.textContent = '';
+            }
+        }
+
+        function showStats(message, isError) {
+            statsDiv.textContent = message;
+            statsDiv.className = `stats visible ${isError ? 'error' : ''}`;
+        }
+
+        function displayResults(suggestions) {
+            if (!Array.isArray(suggestions) || suggestions.length === 0) {
+                resultsDiv.innerHTML = '<div class="no-results">No results found</div>';
+                return;
+            }
+            
+            resultsDiv.innerHTML = suggestions.map(item => {
+                // Handle different response formats
+                const display = item.suggestion || item.address || item.text || JSON.stringify(item);
+                return `<div class="result-item">${escapeHtml(display)}</div>`;
+            }).join('');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function toggleRaw() {
+            rawJsonPre.style.display = rawJsonPre.style.display === 'none' ? 'block' : 'none';
+        }
+    </script>
+</body>
+</html>

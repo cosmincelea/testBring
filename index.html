@@ -22,11 +22,6 @@
         .input-group {
             display: flex;
             gap: 10px;
-            margin-bottom: 10px; /* Reduced margin */
-        }
-        .config-group {
-            display: flex;
-            gap: 10px;
             margin-bottom: 20px;
         }
         input, button {
@@ -43,9 +38,6 @@
             width: 80px;
             text-transform: uppercase;
         }
-        #apiKey {
-            flex: 1;
-        }
         #searchQuery {
             flex: 1;
         }
@@ -54,7 +46,7 @@
             color: white;
             border: none;
             cursor: pointer;
-            white-space: nowrap; /* Prevent button text wrapping */
+            white-space: nowrap;
         }
         button:hover {
             background: #0056b3;
@@ -111,12 +103,8 @@
 <body>
     <h1>Bring Address API Tester 📦</h1>
     
-    <div class="config-group">
-        <input type="text" id="apiKey" placeholder="Your Bring API Key" value="08efdeb8-49e5-4b4d-a1d5-96adb0ac8e73">
-        <input type="text" id="countryCode" placeholder="NO" value="NO" maxlength="2">
-    </div>
-    
     <div class="input-group">
+        <input type="text" id="countryCode" placeholder="NO" value="NO" maxlength="2">
         <input type="text" id="searchQuery" placeholder="Enter address to search...">
         <button onclick="search()">Search</button>
         <button class="toggle-raw" onclick="toggleRaw()">Toggle Raw</button>
@@ -129,7 +117,6 @@
     <pre id="rawJson" style="display: none;"></pre>
 
     <script>
-        const apiKeyInput = document.getElementById('apiKey');
         const searchInput = document.getElementById('searchQuery');
         const countryInput = document.getElementById('countryCode');
         const statsDiv = document.getElementById('stats');
@@ -138,6 +125,23 @@
         
         let lastResponse = null;
 
+        // 🚨 IMPORTANT: Hardcoded Credentials as requested
+        const API_USER_ID = "rolf@avfallsekk.no";
+        const API_KEY = "08efdeb8-49e5-4b4d-a1d5-96adb0ac8e73";
+        
+        // Define Headers using the preferred method
+        const myHeaders = new Headers();
+        myHeaders.append("X-MyBring-API-Uid", API_USER_ID);
+        myHeaders.append("X-MyBring-API-Key", API_KEY);
+        myHeaders.append("Accept", "application/json"); // Added for completeness
+
+        const requestOptions = {
+            method: "GET",
+            headers: myHeaders,
+            redirect: "follow"
+        };
+
+
         searchInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') search();
         });
@@ -145,18 +149,13 @@
         async function search() {
             const country = countryInput.value.trim().toUpperCase() || 'NO';
             const query = searchInput.value.trim();
-            const apiKey = apiKeyInput.value.trim(); // Get the API Key
             
             if (!query) {
                 showStats('Please enter a search query', true);
                 return;
             }
 
-            if (!apiKey || apiKey === 'YOUR_API_KEY_HERE') {
-                showStats('Please enter a valid API Key', true);
-                return;
-            }
-
+            // Construct the API URL
             const url = `https://api.bring.com/address/api/${country}/addresses/suggestions?q=${encodeURIComponent(query)}`;
             
             resultsDiv.innerHTML = '<div class="no-results">Loading...</div>';
@@ -165,28 +164,21 @@
             const startTime = performance.now();
             
             try {
-                // ADDING AUTHENTICATION
-                const response = await fetch(url, {
-                    headers: {
-                        // The Bring Address API documentation specifies using X-MyBring-API-Key
-                        'X-MyBring-API-Key': apiKey, 
-                        'Accept': 'application/json' // Good practice
-                    }
-                });
-                // END AUTHENTICATION
+                // Use the defined requestOptions
+                const response = await fetch(url, requestOptions);
                 
                 const endTime = performance.now();
                 const duration = (endTime - startTime).toFixed(0);
                 
-                // If the key is invalid or missing, the status is often 403 or 401
                 if (!response.ok) {
-                    throw new Error(`HTTP ${response.status} (${response.statusText}). Check your API Key and query parameters.`);
+                    // This will catch the 401/403 auth error if it occurs
+                    const errorBody = await response.text(); 
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}. Response body: ${errorBody.substring(0, 100)}...`);
                 }
                 
                 const data = await response.json();
                 lastResponse = data;
                 
-                // Bring's response structure might put suggestions directly or under 'suggestions'
                 const suggestions = data.suggestions || data || [];
                 const count = Array.isArray(suggestions) ? suggestions.length : 0;
                 
